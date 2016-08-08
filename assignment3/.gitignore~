@@ -1,0 +1,4 @@
+*.swp
+*.pyc
+.env/*
+/home/jugal/Documents/cs231n/assignment3/cs231n/datasets/

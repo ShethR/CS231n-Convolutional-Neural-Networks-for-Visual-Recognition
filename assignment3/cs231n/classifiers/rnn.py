@@ -135,7 +135,16 @@ class CaptioningRNN(object):
     # defined above to store loss and gradients; grads[k] should give the      #
     # gradients for self.params[k].                                            #
     ############################################################################
-    pass
+    imag_act, cache_img = affine_forward(features, W_proj, b_proj)
+    x, cache_embed = word_embedding_forward(captions_in, W_embed)
+    h_next, cache_rnn = rnn_forward(x, imag_act, Wx, Wh, b)
+    scores, cache_scores = temporal_affine_forward(h_next, W_vocab, b_vocab)
+    loss , dx = temporal_softmax_loss(scores, captions_out, mask)
+
+    dx, grads['W_vocab'], grads['b_vocab'] =  temporal_affine_backward(dx, cache_scores)
+    dx, dimg_act, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dx, cache_rnn)
+    grads['W_embed'] = word_embedding_backward(dx, cache_embed)
+    dx_img, grads['W_proj'], grads['b_proj'] = affine_backward(dimg_act, cache_img)
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -197,7 +206,22 @@ class CaptioningRNN(object):
     # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
     # a loop.                                                                 #
     ###########################################################################
-    pass
+    h_prev, _ = affine_forward(features, W_proj, b_proj)
+    start = self._start * np.ones((N,1), dtype=np.int)
+    for t in range(max_length):
+        start_embed, _ = word_embedding_forward(start, W_embed)
+        start_embed = np.squeeze(start_embed) 
+
+        h_next, _ = rnn_step_forward (start_embed, h_prev, Wx, Wh, b)
+        dim = h_next.shape
+        h_next = np.reshape(h_next, ((dim[0], 1, dim[1])))
+
+        scores, _ = temporal_affine_forward(h_next, W_vocab, b_vocab)
+        scores = np.squeeze(scores)
+        captions[:,t] = np.argmax(scores, axis=1)
+
+        start = captions[:,t].reshape(N,1)
+        h_prev = np.reshape(h_next, (dim))
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################

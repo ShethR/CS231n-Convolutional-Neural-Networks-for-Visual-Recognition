@@ -96,6 +96,7 @@ class CaptioningRNN(object):
     # token, and the first element of captions_out will be the first word.
     captions_in = captions[:, :-1]
     captions_out = captions[:, 1:]
+    cell_type = self.cell_type
     
     # You'll need this 
     mask = (captions_out != self._null)
@@ -137,12 +138,25 @@ class CaptioningRNN(object):
     ############################################################################
     imag_act, cache_img = affine_forward(features, W_proj, b_proj)
     x, cache_embed = word_embedding_forward(captions_in, W_embed)
-    h_next, cache_rnn = rnn_forward(x, imag_act, Wx, Wh, b)
+ #------------------------------------------------------------------------------   
+    if(cell_type == 'rnn'):
+      h_next, cache_rnn = rnn_forward(x, imag_act, Wx, Wh, b)
+
+    else: 
+      h_next, cache_rnn = lstm_forward (x, imag_act, Wx, Wh, b)
+ #------------------------------------------------------------------------------
     scores, cache_scores = temporal_affine_forward(h_next, W_vocab, b_vocab)
     loss , dx = temporal_softmax_loss(scores, captions_out, mask)
-
+ #------------------------------------------------------------------------------
     dx, grads['W_vocab'], grads['b_vocab'] =  temporal_affine_backward(dx, cache_scores)
-    dx, dimg_act, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dx, cache_rnn)
+
+    if(cell_type == 'rnn'):
+      dx, dimg_act, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dx, cache_rnn)
+
+    else:
+      dx, dimg_act, grads['Wx'], grads['Wh'], grads['b'] = lstm_backward(dx, cache_rnn)
+ #------------------------------------------------------------------------------
+
     grads['W_embed'] = word_embedding_backward(dx, cache_embed)
     dx_img, grads['W_proj'], grads['b_proj'] = affine_backward(dimg_act, cache_img)
     ############################################################################
@@ -178,7 +192,7 @@ class CaptioningRNN(object):
     """
     N = features.shape[0]
     captions = self._null * np.ones((N, max_length), dtype=np.int32)
-
+    cell_type = self.cell_type
     # Unpack parameters
     W_proj, b_proj = self.params['W_proj'], self.params['b_proj']
     W_embed = self.params['W_embed']
@@ -208,11 +222,16 @@ class CaptioningRNN(object):
     ###########################################################################
     h_prev, _ = affine_forward(features, W_proj, b_proj)
     start = self._start * np.ones((N,1), dtype=np.int)
+    if(cell_type == 'lstm'):
+      c_prev = np.zeros_like(h_prev)
     for t in range(max_length):
         start_embed, _ = word_embedding_forward(start, W_embed)
         start_embed = np.squeeze(start_embed) 
-
-        h_next, _ = rnn_step_forward (start_embed, h_prev, Wx, Wh, b)
+        if(cell_type == 'rnn'):
+          h_next, _ = rnn_step_forward (start_embed, h_prev, Wx, Wh, b)
+        else:
+          h_next, c_prev, _ = lstm_step_forward (start_embed, h_prev, c_prev, Wx, Wh, b)
+         
         dim = h_next.shape
         h_next = np.reshape(h_next, ((dim[0], 1, dim[1])))
 
